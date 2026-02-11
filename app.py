@@ -25,32 +25,49 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # -----------------------------
 # Model Definition
 # -----------------------------
+
 class Encoder(nn.Module):
-    def __init__(self, feature_dim=2048, hidden_size=512):
+    def __init__(self, feature_dim=2048, hidden_size=512, dropout=0.5):
         super().__init__()
         self.fc = nn.Linear(feature_dim, hidden_size)
+        self.bn = nn.BatchNorm1d(hidden_size)
         self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        return self.relu(self.fc(x))
+        x = self.fc(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        return x
 
 
 class Decoder(nn.Module):
-    def __init__(self, vocab_size, embed_size=256, hidden_size=512):
+    def __init__(self, vocab_size, embed_size=256, hidden_size=512, num_layers=2, dropout=0.3):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embed_size)
-        self.lstm = nn.LSTM(embed_size, hidden_size, batch_first=True)
+        self.lstm = nn.LSTM(embed_size, hidden_size, num_layers,
+                            batch_first=True, dropout=dropout)
         self.fc = nn.Linear(hidden_size, vocab_size)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, x, hidden):
         embedded = self.embedding(x)
+        embedded = self.dropout(embedded)
         output, hidden = self.lstm(embedded, hidden)
+        output = self.dropout(output)
         output = self.fc(output)
         return output, hidden
 
     def init_hidden(self, encoder_output):
-        h0 = encoder_output.unsqueeze(0)
+        batch_size = encoder_output.size(0)
+        num_layers = 2
+        hidden_size = encoder_output.size(1)
+
+        h0 = torch.zeros(num_layers, batch_size, hidden_size).to(encoder_output.device)
+        h0[0] = encoder_output
         c0 = torch.zeros_like(h0)
+
         return (h0, c0)
 
 
