@@ -5,11 +5,29 @@ import torchvision.models as models
 import torchvision.transforms as transforms
 from PIL import Image
 import pickle
-import numpy as np
+import requests
+import os
 
-# -----------------------------
-# Load Vocabulary
-# -----------------------------
+# --------------------------------------------------
+# 🔽 DOWNLOAD MODEL & VOCAB FROM HUGGINGFACE
+# --------------------------------------------------
+
+MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/blob/main/best_model.pth"
+VOCAB_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/blob/main/vocab.pkl"
+
+def download_file(url, filename):
+    if not os.path.exists(filename):
+        r = requests.get(url)
+        with open(filename, "wb") as f:
+            f.write(r.content)
+
+download_file(MODEL_URL, "best_model.pth")
+download_file(VOCAB_URL, "vocab.pkl")
+
+# --------------------------------------------------
+# 🔤 LOAD VOCAB
+# --------------------------------------------------
+
 with open("vocab.pkl", "rb") as f:
     vocab_data = pickle.load(f)
 
@@ -22,9 +40,9 @@ PAD_TOKEN = "<pad>"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# -----------------------------
-# Model Definition
-# -----------------------------
+# --------------------------------------------------
+# 🧠 MODEL ARCHITECTURE (MATCHES TRAINING)
+# --------------------------------------------------
 
 class Encoder(nn.Module):
     def __init__(self, feature_dim=2048, hidden_size=512, dropout=0.5):
@@ -84,16 +102,18 @@ class ImageCaptioningModel(nn.Module):
         return outputs
 
 
-# -----------------------------
-# Load Model
-# -----------------------------
+# --------------------------------------------------
+# 📦 LOAD TRAINED MODEL
+# --------------------------------------------------
+
 model = ImageCaptioningModel(len(word2idx)).to(device)
 model.load_state_dict(torch.load("best_model.pth", map_location=device))
 model.eval()
 
-# -----------------------------
-# ResNet Feature Extractor
-# -----------------------------
+# --------------------------------------------------
+# 🖼️ RESNET FEATURE EXTRACTOR
+# --------------------------------------------------
+
 resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
 resnet = nn.Sequential(*list(resnet.children())[:-1])
 resnet = resnet.to(device)
@@ -106,9 +126,10 @@ transform = transforms.Compose([
                          [0.229,0.224,0.225])
 ])
 
-# -----------------------------
-# Greedy Search
-# -----------------------------
+# --------------------------------------------------
+# ✨ GREEDY SEARCH
+# --------------------------------------------------
+
 def generate_caption(image):
     image = transform(image).unsqueeze(0).to(device)
 
@@ -124,26 +145,29 @@ def generate_caption(image):
             output, hidden = model.decoder(curr_token, hidden)
             next_token = output.argmax(-1).item()
 
-            if idx2word[next_token] == END_TOKEN:
+            word = idx2word[next_token]
+            if word == END_TOKEN:
                 break
 
-            caption.append(idx2word[next_token])
+            caption.append(word)
             curr_token = torch.tensor([[next_token]]).to(device)
 
     return " ".join(caption)
 
 
-# -----------------------------
-# Streamlit UI
-# -----------------------------
+# --------------------------------------------------
+# 🌐 STREAMLIT UI
+# --------------------------------------------------
+
 st.title("🖼️ Neural Storyteller - Image Captioning")
 
-uploaded_file = st.file_uploader("Upload an Image", type=["jpg","jpeg","png"])
+uploaded_file = st.file_uploader("Upload an image", type=["jpg","jpeg","png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
     if st.button("Generate Caption"):
-        caption = generate_caption(image)
+        with st.spinner("Generating caption..."):
+            caption = generate_caption(image)
         st.success("Caption: " + caption)
