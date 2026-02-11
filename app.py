@@ -12,8 +12,8 @@ import os
 # 🔽 DOWNLOAD MODEL & VOCAB FROM HUGGINGFACE
 # --------------------------------------------------
 
-MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/blob/main/best_model.pth"
-VOCAB_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/blob/main/vocab.pkl"
+MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/best_model.pth"
+VOCAB_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/vocab.pkl"
 
 def download_file(url, filename):
     if not os.path.exists(filename):
