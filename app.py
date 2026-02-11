@@ -9,7 +9,7 @@ import requests
 import os
 
 # --------------------------------------------------
-# 🔽 DOWNLOAD MODEL & VOCAB FROM HUGGINGFACE
+# DOWNLOAD MODEL & VOCAB FROM HUGGINGFACE
 # --------------------------------------------------
 
 MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/best_model.pth"
@@ -25,7 +25,7 @@ download_file(MODEL_URL, "best_model.pth")
 download_file(VOCAB_URL, "vocab.pkl")
 
 # --------------------------------------------------
-# 🔤 LOAD VOCAB
+# LOAD VOCAB
 # --------------------------------------------------
 
 with open("vocab.pkl", "rb") as f:
@@ -37,11 +37,12 @@ idx2word = vocab_data["idx2word"]
 START_TOKEN = "<start>"
 END_TOKEN = "<end>"
 PAD_TOKEN = "<pad>"
+UNK_TOKEN = "<unk>"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # --------------------------------------------------
-# 🧠 MODEL ARCHITECTURE (MATCHES TRAINING)
+# EXACT MODEL FROM YOUR NOTEBOOK
 # --------------------------------------------------
 
 class Encoder(nn.Module):
@@ -52,12 +53,12 @@ class Encoder(nn.Module):
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x):
-        x = self.fc(x)
-        x = self.bn(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        return x
+    def forward(self, features):
+        out = self.fc(features)
+        out = self.bn(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        return out
 
 
 class Decoder(nn.Module):
@@ -72,9 +73,9 @@ class Decoder(nn.Module):
     def forward(self, x, hidden):
         embedded = self.embedding(x)
         embedded = self.dropout(embedded)
-        output, hidden = self.lstm(embedded, hidden)
-        output = self.dropout(output)
-        output = self.fc(output)
+        lstm_out, hidden = self.lstm(embedded, hidden)
+        lstm_out = self.dropout(lstm_out)
+        output = self.fc(lstm_out)
         return output, hidden
 
     def init_hidden(self, encoder_output):
@@ -82,7 +83,7 @@ class Decoder(nn.Module):
         num_layers = 2
         hidden_size = encoder_output.size(1)
 
-        h0 = torch.zeros(num_layers, batch_size, hidden_size).to(encoder_output.device)
+        h0 = torch.zeros(num_layers, batch_size, hidden_size, device=encoder_output.device)
         h0[0] = encoder_output
         c0 = torch.zeros_like(h0)
 
@@ -90,10 +91,10 @@ class Decoder(nn.Module):
 
 
 class ImageCaptioningModel(nn.Module):
-    def __init__(self, vocab_size):
+    def __init__(self, vocab_size, feature_dim=2048, embed_size=256, hidden_size=512):
         super().__init__()
-        self.encoder = Encoder()
-        self.decoder = Decoder(vocab_size)
+        self.encoder = Encoder(feature_dim, hidden_size)
+        self.decoder = Decoder(vocab_size, embed_size, hidden_size)
 
     def forward(self, features, captions):
         enc_out = self.encoder(features)
@@ -103,15 +104,15 @@ class ImageCaptioningModel(nn.Module):
 
 
 # --------------------------------------------------
-# 📦 LOAD TRAINED MODEL
+# LOAD TRAINED MODEL
 # --------------------------------------------------
 
-model = ImageCaptioningModel(len(word2idx)).to(device)
+model = ImageCaptioningModel(vocab_size=len(word2idx)).to(device)
 model.load_state_dict(torch.load("best_model.pth", map_location=device))
 model.eval()
 
 # --------------------------------------------------
-# 🖼️ RESNET FEATURE EXTRACTOR
+# RESNET FEATURE EXTRACTOR
 # --------------------------------------------------
 
 resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
@@ -120,48 +121,48 @@ resnet = resnet.to(device)
 resnet.eval()
 
 transform = transforms.Compose([
-    transforms.Resize((224,224)),
+    transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize([0.485,0.456,0.406],
-                         [0.229,0.224,0.225])
+    transforms.Normalize([0.485, 0.456, 0.406],
+                         [0.229, 0.224, 0.225])
 ])
 
 # --------------------------------------------------
-# ✨ GREEDY SEARCH
+# GREEDY SEARCH (SAME LOGIC)
 # --------------------------------------------------
 
 def generate_caption(image):
     image = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
-        feature = resnet(image).view(1,-1)
+        feature = resnet(image).view(1, -1)
         enc_out = model.encoder(feature)
         hidden = model.decoder.init_hidden(enc_out)
 
-        curr_token = torch.tensor([[word2idx[START_TOKEN]]]).to(device)
-        caption = []
+        curr_token = torch.tensor([[word2idx[START_TOKEN]]], device=device)
+        caption_tokens = []
 
         for _ in range(30):
             output, hidden = model.decoder(curr_token, hidden)
-            next_token = output.argmax(-1).item()
+            next_token = output.argmax(dim=-1).item()
 
             word = idx2word[next_token]
             if word == END_TOKEN:
                 break
 
-            caption.append(word)
-            curr_token = torch.tensor([[next_token]]).to(device)
+            caption_tokens.append(word)
+            curr_token = torch.tensor([[next_token]], device=device)
 
-    return " ".join(caption)
+    return " ".join(caption_tokens)
 
 
 # --------------------------------------------------
-# 🌐 STREAMLIT UI
+# STREAMLIT UI
 # --------------------------------------------------
 
 st.title("🖼️ Neural Storyteller - Image Captioning")
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg","jpeg","png"])
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
