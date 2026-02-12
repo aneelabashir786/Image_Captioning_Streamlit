@@ -219,7 +219,7 @@ def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=3, max_len=
 # 5. Streamlit UI
 # ------------------------------
 st.set_page_config(page_title="Image Captioning", layout="centered")
-st.title("📸 Image Captioning – Hugging Face Model")
+st.title("Neural Storyteller – Image Captioning with Seq2Seq")
 st.markdown("Upload an image and choose a decoding strategy.")
 
 # --- Load resources ---
