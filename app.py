@@ -1,12 +1,11 @@
 """
 Streamlit App for Image Captioning
 -----------------------------------
-- Downloads model & vocab from Hugging Face URLs
-- Uses pretrained ResNet50 as image encoder (frozen)
-- Generates captions with greedy or beam search (k=3)
+- Downloads model & vocab from Hugging Face
+- Greedy and Beam Search (k=3)
+- Robust error handling
 """
 
-import os
 import pickle
 import re
 from io import BytesIO
@@ -19,11 +18,14 @@ from torchvision import models, transforms
 from PIL import Image
 
 # ----------------------------------------------------------------------
-#   🔗 YOUR HUGGING FACE LINKS – REPLACE THESE WITH YOUR ACTUAL URLs
+#    YOUR HUGGING FACE LINKS – REPLACE THESE!
 # ----------------------------------------------------------------------
 
 MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/best_model.pth"
 VOCAB_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/vocab.pkl"
+
+
+# ----------------------------------------------------------------------
 
 # ------------------------------
 # 1. Model Definitions (same as training)
@@ -86,7 +88,6 @@ class ImageCaptioningModel(nn.Module):
 # ------------------------------
 @st.cache_resource
 def download_vocab(url):
-    """Download vocab.pkl from Hugging Face and load word2idx/idx2word."""
     response = requests.get(url)
     response.raise_for_status()
     vocab_data = pickle.loads(response.content)
@@ -94,10 +95,8 @@ def download_vocab(url):
 
 @st.cache_resource
 def download_model(url, vocab_size):
-    """Download model weights from Hugging Face, instantiate model, load weights."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = ImageCaptioningModel(vocab_size=vocab_size).to(device)
-
     response = requests.get(url)
     response.raise_for_status()
     buffer = BytesIO(response.content)
@@ -108,7 +107,6 @@ def download_model(url, vocab_size):
 
 @st.cache_resource
 def load_feature_extractor():
-    """Load pretrained ResNet50 without top FC layer."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     resnet = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     resnet = nn.Sequential(*list(resnet.children())[:-1])
@@ -127,26 +125,29 @@ transform = transforms.Compose([
 ])
 
 def extract_features(image, resnet, device):
-    """Convert PIL image -> feature vector (2048-dim)."""
     img_tensor = transform(image).unsqueeze(0).to(device)
     with torch.no_grad():
         features = resnet(img_tensor)
-        features = features.view(1, -1)  # (1,2048)
+        features = features.view(1, -1)
     return features
 
 # ------------------------------
-# 4. Inference Functions
+# 4. Robust Inference Functions
 # ------------------------------
 def greedy_search(model, feature_tensor, word2idx, idx2word, max_len=30):
     model.eval()
     device = next(model.parameters()).device
+    feature_tensor = feature_tensor.to(device)
 
     with torch.no_grad():
         enc_out = model.encoder(feature_tensor)
         hidden = model.decoder.init_hidden(enc_out)
 
-        start_token = word2idx['<start>']
-        end_token = word2idx['<end>']
+        start_token = word2idx.get('<start>', None)
+        end_token = word2idx.get('<end>', None)
+        if start_token is None or end_token is None:
+            raise ValueError("Missing <start> or <end> token in vocabulary!")
+
         curr_token = torch.tensor([[start_token]], device=device)
         caption_tokens = []
 
@@ -155,9 +156,12 @@ def greedy_search(model, feature_tensor, word2idx, idx2word, max_len=30):
             lstm_out, hidden = model.decoder.lstm(embedded, hidden)
             logits = model.decoder.fc(lstm_out)
             next_token = logits.argmax(dim=-1).item()
+
             if next_token == end_token:
                 break
-            caption_tokens.append(idx2word[next_token])
+            # Safely get word
+            word = idx2word.get(next_token, '<UNK>')
+            caption_tokens.append(word)
             curr_token = torch.tensor([[next_token]], device=device)
 
     return ' '.join(caption_tokens)
@@ -165,13 +169,16 @@ def greedy_search(model, feature_tensor, word2idx, idx2word, max_len=30):
 def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=3, max_len=30):
     model.eval()
     device = next(model.parameters()).device
+    feature_tensor = feature_tensor.to(device)
 
     with torch.no_grad():
         enc_out = model.encoder(feature_tensor)
         hidden = model.decoder.init_hidden(enc_out)
 
-        start_token = word2idx['<start>']
-        end_token = word2idx['<end>']
+        start_token = word2idx.get('<start>')
+        end_token = word2idx.get('<end>')
+        if start_token is None or end_token is None:
+            raise ValueError("Missing <start> or <end> token in vocabulary!")
 
         beams = [([start_token], 0.0, hidden)]
 
@@ -205,76 +212,83 @@ def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=3, max_len=
     for idx in best_seq[1:]:
         if idx == end_token:
             break
-        words.append(idx2word[idx])
+        words.append(idx2word.get(idx, '<UNK>'))
     return ' '.join(words)
 
 # ------------------------------
 # 5. Streamlit UI
 # ------------------------------
-st.set_page_config(page_title="Image Captioning with HF Model", layout="centered")
-st.title("📸 Image Captioning – Hugging Face Deployment")
-st.markdown("Upload an image and get a caption from your model trained on Flickr30k.")
+st.set_page_config(page_title="Image Captioning", layout="centered")
+st.title("📸 Image Captioning – Hugging Face Model")
+st.markdown("Upload an image and choose a decoding strategy.")
 
-# --- Load everything from Hugging Face ---
-with st.spinner("📥 Downloading vocabulary from Hugging Face..."):
+# --- Load resources ---
+with st.spinner("📥 Downloading vocabulary..."):
     try:
         word2idx, idx2word = download_vocab(VOCAB_URL)
         vocab_size = len(word2idx)
         st.success("✅ Vocabulary loaded")
     except Exception as e:
-        st.error(f"Failed to download vocab.pkl: {e}")
+        st.error(f"Failed to load vocabulary: {e}")
         st.stop()
 
-with st.spinner("📥 Downloading model weights from Hugging Face..."):
+with st.spinner("📥 Downloading model weights..."):
     try:
         model, device = download_model(MODEL_URL, vocab_size)
         st.success(f"✅ Model loaded on {device}")
     except Exception as e:
-        st.error(f"Failed to download best_model.pth: {e}")
+        st.error(f"Failed to load model: {e}")
         st.stop()
 
-with st.spinner("🖼️ Loading ResNet50 feature extractor..."):
+with st.spinner("🖼️ Loading ResNet50..."):
     resnet, resnet_device = load_feature_extractor()
     st.success("✅ ResNet50 ready")
 
-# --- Image input ---
-st.subheader("1. Choose an image")
-uploaded_file = st.file_uploader("Upload an image (JPG, PNG)", type=["jpg", "jpeg", "png"])
+# --- Image upload ---
+st.subheader("1. Select an image")
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
-if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert('RGB')
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-else:
-    st.info("👆 Please upload an image to begin.")
+if uploaded_file is None:
+    st.info("👆 Please upload an image to continue.")
     st.stop()
 
-# --- Caption generation ---
-st.subheader("2. Generate caption")
-col1, col2 = st.columns(2)
-with col1:
-    use_beam = st.checkbox("Use beam search (k=3)", value=True)
-with col2:
-    generate_btn = st.button("✨ Generate Caption")
+image = Image.open(uploaded_file).convert('RGB')
+st.image(image, caption="Uploaded Image", use_column_width=True)
 
-if generate_btn:
+# --- Decoding method ---
+st.subheader("2. Choose decoding method")
+method = st.radio(
+    "Select search strategy:",
+    ("Greedy Search", "Beam Search (k=3)"),
+    horizontal=True
+)
+
+# --- Generate button ---
+if st.button("✨ Generate Caption", type="primary"):
     with st.spinner("Extracting features and generating..."):
-        # Extract features
-        features = extract_features(image, resnet, resnet_device)
-        # Move to model device
-        features = features.to(device)
+        try:
+            features = extract_features(image, resnet, resnet_device)
+            # Features are on resnet_device, model might be on different device
+            # Move to model's device
+            features = features.to(device)
 
-        if use_beam:
-            caption = beam_search(model, features, word2idx, idx2word, beam_size=3)
-            method = "Beam Search (k=3)"
-        else:
-            caption = greedy_search(model, features, word2idx, idx2word)
-            method = "Greedy Search"
+            if method == "Beam Search (k=3)":
+                caption = beam_search(model, features, word2idx, idx2word, beam_size=3)
+            else:
+                caption = greedy_search(model, features, word2idx, idx2word)
 
-    st.success("Caption generated!")
-    st.markdown(f"**{method}**")
-    st.markdown(f"<h3 style='color: #2e86ab;'>{caption}</h3>", unsafe_allow_html=True)
+            st.success("Caption generated!")
+            st.markdown(f"**{method}**")
+            if caption.strip():
+                st.markdown(f"<h2 style='color: #2e86ab;'>{caption}</h2>", unsafe_allow_html=True)
+            else:
+                st.warning("⚠️ Model generated an empty caption. Try another image.")
+
+        except Exception as e:
+            st.error(f"Caption generation failed: {str(e)}")
 else:
     st.info("Click the button to generate a caption.")
 
 st.markdown("---")
-st.markdown(f"**Model source:** `{MODEL_URL}`  \n**Vocabulary source:** `{VOCAB_URL}`")
+st.caption(f"Model: `{MODEL_URL}`  |  Vocab: `{VOCAB_URL}`")
+
