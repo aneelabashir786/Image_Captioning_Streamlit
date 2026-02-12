@@ -2,7 +2,7 @@
 Streamlit App for Image Captioning
 -----------------------------------
 - Downloads model & vocab from Hugging Face
-- Greedy and Beam Search (k=3)
+- Greedy and Beam Search (k=7)
 - Robust error handling
 """
 
@@ -272,7 +272,7 @@ if st.button("Generate Caption", type="primary"):
             # Move to model's device
             features = features.to(device)
 
-            if method == "Beam Search (k=3)":
+            if method == "Beam Search (k=7)":
                 caption = beam_search(model, features, word2idx, idx2word, beam_size=3)
             else:
                 caption = greedy_search(model, features, word2idx, idx2word)
