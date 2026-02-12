@@ -290,5 +290,5 @@ else:
     st.info("Click the button to generate a caption.")
 
 st.markdown("---")
-st.caption(f"Model: `{MODEL_URL}`  |  Vocab: `{VOCAB_URL}`")
+# st.caption(f"Model: `{MODEL_URL}`  |  Vocab: `{VOCAB_URL}`")
 
