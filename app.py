@@ -1,7 +1,3 @@
-# --------------------------------------------------
-# DOWNLOAD MODEL & VOCAB FROM HUGGINGFACE
-# --------------------------------------------------
-
 """
 Streamlit App for Image Captioning
 -----------------------------------
@@ -21,8 +17,6 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 from PIL import Image
-import nltk
-nltk.download('punkt', quiet=True)
 
 # ----------------------------------------------------------------------
 #   🔗 YOUR HUGGING FACE LINKS – REPLACE THESE WITH YOUR ACTUAL URLs
@@ -106,7 +100,6 @@ def download_model(url, vocab_size):
 
     response = requests.get(url)
     response.raise_for_status()
-    # Save to temporary bytes buffer and load
     buffer = BytesIO(response.content)
     state_dict = torch.load(buffer, map_location=device)
     model.load_state_dict(state_dict)
