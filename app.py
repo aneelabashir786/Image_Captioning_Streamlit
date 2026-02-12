@@ -2,7 +2,7 @@
 Streamlit App for Image Captioning
 -----------------------------------
 - Downloads model & vocab from Hugging Face
-- Greedy and Beam Search (k=7)
+- Greedy and Beam Search (k=3)
 - Robust error handling
 """
 
@@ -166,7 +166,7 @@ def greedy_search(model, feature_tensor, word2idx, idx2word, max_len=30):
 
     return ' '.join(caption_tokens)
 
-def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=7, max_len=30):
+def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=3, max_len=30):
     model.eval()
     device = next(model.parameters()).device
     feature_tensor = feature_tensor.to(device)
@@ -223,7 +223,7 @@ st.title("📸 Image Captioning – Hugging Face Model")
 st.markdown("Upload an image and choose a decoding strategy.")
 
 # --- Load resources ---
-with st.spinner("📥 Downloading vocabulary..."):
+with st.spinner(" Downloading vocabulary..."):
     try:
         word2idx, idx2word = download_vocab(VOCAB_URL)
         vocab_size = len(word2idx)
@@ -232,7 +232,7 @@ with st.spinner("📥 Downloading vocabulary..."):
         st.error(f"Failed to load vocabulary: {e}")
         st.stop()
 
-with st.spinner("📥 Downloading model weights..."):
+with st.spinner(" Downloading model weights..."):
     try:
         model, device = download_model(MODEL_URL, vocab_size)
         st.success(f"✅ Model loaded on {device}")
@@ -240,7 +240,7 @@ with st.spinner("📥 Downloading model weights..."):
         st.error(f"Failed to load model: {e}")
         st.stop()
 
-with st.spinner("🖼️ Loading ResNet50..."):
+with st.spinner(" Loading ResNet50..."):
     resnet, resnet_device = load_feature_extractor()
     st.success("✅ ResNet50 ready")
 
@@ -259,7 +259,7 @@ st.image(image, caption="Uploaded Image", use_column_width=True)
 st.subheader("2. Choose decoding method")
 method = st.radio(
     "Select search strategy:",
-    ("Greedy Search", "Beam Search (k=7)"),
+    ("Greedy Search", "Beam Search (k=3)"),
     horizontal=True
 )
 
@@ -272,7 +272,7 @@ if st.button("Generate Caption", type="primary"):
             # Move to model's device
             features = features.to(device)
 
-            if method == "Beam Search (k=7)":
+            if method == "Beam Search (k=3)":
                 caption = beam_search(model, features, word2idx, idx2word, beam_size=3)
             else:
                 caption = greedy_search(model, features, word2idx, idx2word)
