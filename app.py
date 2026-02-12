@@ -166,7 +166,7 @@ def greedy_search(model, feature_tensor, word2idx, idx2word, max_len=30):
 
     return ' '.join(caption_tokens)
 
-def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=3, max_len=30):
+def beam_search(model, feature_tensor, word2idx, idx2word, beam_size=7, max_len=30):
     model.eval()
     device = next(model.parameters()).device
     feature_tensor = feature_tensor.to(device)
@@ -249,7 +249,7 @@ st.subheader("1. Select an image")
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is None:
-    st.info("👆 Please upload an image to continue.")
+    st.info(" Please upload an image to continue.")
     st.stop()
 
 image = Image.open(uploaded_file).convert('RGB')
@@ -259,12 +259,12 @@ st.image(image, caption="Uploaded Image", use_column_width=True)
 st.subheader("2. Choose decoding method")
 method = st.radio(
     "Select search strategy:",
-    ("Greedy Search", "Beam Search (k=3)"),
+    ("Greedy Search", "Beam Search (k=7)"),
     horizontal=True
 )
 
 # --- Generate button ---
-if st.button("✨ Generate Caption", type="primary"):
+if st.button("Generate Caption", type="primary"):
     with st.spinner("Extracting features and generating..."):
         try:
             features = extract_features(image, resnet, resnet_device)
@@ -282,7 +282,7 @@ if st.button("✨ Generate Caption", type="primary"):
             if caption.strip():
                 st.markdown(f"<h2 style='color: #2e86ab;'>{caption}</h2>", unsafe_allow_html=True)
             else:
-                st.warning("⚠️ Model generated an empty caption. Try another image.")
+                st.warning(" Model generated an empty caption. Try another image.")
 
         except Exception as e:
             st.error(f"Caption generation failed: {str(e)}")
