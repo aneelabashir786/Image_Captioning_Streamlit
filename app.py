@@ -21,8 +21,8 @@ from PIL import Image
 #    YOUR HUGGING FACE LINKS – REPLACE THESE!
 # ----------------------------------------------------------------------
 
-MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/best_model.pth"
-VOCAB_URL = "https://huggingface.co/aneelaBashir22f3414/Image_Captioning/resolve/main/vocab.pkl"
+MODEL_URL = "https://huggingface.co/aneelaBashir22f3414/captioning/resolve/main/best_model.pth"
+VOCAB_URL = "https://huggingface.co/aneelaBashir22f3414/captioning/resolve/main/vocab.pkl"
 
 
 # ----------------------------------------------------------------------
